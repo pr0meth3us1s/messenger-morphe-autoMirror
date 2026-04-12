@@ -17,7 +17,7 @@ jobs:
         run: |
           curl -fsSL "https://api.github.com/repos/RookieEnough/Morphe-AutoBuilds/releases/latest" -o release.json
 
-      - name: Pick Messenger APK and build dated names
+      - name: Pick Messenger APK and build names
         id: pick
         shell: bash
         run: |
@@ -57,7 +57,7 @@ jobs:
 
           SAFE_VERSION=$(printf '%s' "$VERSION" | tr -cd '[:alnum:]._-')
 
-          MIRROR_TAG="messenger-${BUILD_DATE}"
+          MIRROR_TAG="v${SAFE_VERSION}"
           RELEASE_TITLE="v${SAFE_VERSION}"
           VERSIONED_NAME="messenger-Morphe-${BUILD_DATE}-v${SAFE_VERSION}.apk"
 
@@ -78,23 +78,21 @@ jobs:
           echo "Mirror release title: $RELEASE_TITLE"
           echo "Mirror APK filename: $VERSIONED_NAME"
 
-      - name: Delete same-day release if it exists
+      - name: Skip if mirrored release already exists
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "${{ steps.pick.outputs.mirror_tag }}" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && \
-          gh release delete "${{ steps.pick.outputs.mirror_tag }}" -R "$GITHUB_REPOSITORY" --yes || true
-
-          gh api -X DELETE \
-            "repos/$GITHUB_REPOSITORY/git/refs/tags/${{ steps.pick.outputs.mirror_tag }}" \
-            >/dev/null 2>&1 || true
+          if gh release view "${{ steps.pick.outputs.mirror_tag }}" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists, nothing to do."
+            exit 0
+          fi
 
       - name: Download APK
         run: |
           curl -fL "${{ steps.pick.outputs.asset_url }}" -o "${{ steps.pick.outputs.versioned_name }}"
           ls -lh "${{ steps.pick.outputs.versioned_name }}"
 
-      - name: Create dated release
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
