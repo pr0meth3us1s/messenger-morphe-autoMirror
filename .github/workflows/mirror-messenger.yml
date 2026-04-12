@@ -1,0 +1,85 @@
+name: Mirror Messenger APK
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 */6 * * *"  # every 6 hours
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch latest upstream release JSON
+        env:
+          UPSTREAM_API: https://api.github.com/repos/RookieEnough/Morphe-AutoBuilds/releases/latest
+        run: |
+          curl -fsSL "$UPSTREAM_API" -o release.json
+          cat release.json | jq -r '.tag_name, .name'
+
+      - name: Find Messenger APK asset
+        id: pick
+        run: |
+          ASSET_NAME=$(jq -r '
+            .assets[]
+            | select(.name | test("messenger"; "i"))
+            | select(.name | test("\\.apk$"; "i"))
+            | .name
+          ' release.json | head -n 1)
+
+          ASSET_URL=$(jq -r --arg NAME "$ASSET_NAME" '
+            .assets[]
+            | select(.name == $NAME)
+            | .browser_download_url
+          ' release.json)
+
+          UPSTREAM_TAG=$(jq -r '.tag_name' release.json)
+          UPSTREAM_NAME=$(jq -r '.name' release.json)
+
+          if [ -z "$ASSET_NAME" ] || [ "$ASSET_NAME" = "null" ]; then
+            echo "No Messenger APK asset found."
+            exit 1
+          fi
+
+          echo "asset_name=$ASSET_NAME" >> "$GITHUB_OUTPUT"
+          echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+          echo "upstream_tag=$UPSTREAM_TAG" >> "$GITHUB_OUTPUT"
+          echo "upstream_name=$UPSTREAM_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "Chosen asset: $ASSET_NAME"
+          echo "Source URL: $ASSET_URL"
+
+      - name: Download APK
+        run: |
+          curl -fL "${{ steps.pick.outputs.asset_url }}" -o "${{ steps.pick.outputs.asset_name }}"
+          ls -lh
+
+      - name: Delete old latest release if it exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          gh release view latest >/dev/null 2>&1
+          EXISTS=$?
+          set -e
+
+          if [ "$EXISTS" -eq 0 ]; then
+            gh release delete latest --yes
+            git push origin :refs/tags/latest || true
+          fi
+
+      - name: Create fresh latest release with only Messenger APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create latest \
+            "${{ steps.pick.outputs.asset_name }}" \
+            --title "Messenger Mirror" \
+            --notes "Mirrored from RookieEnough/Morphe-AutoBuilds
+          
+          Upstream release: ${{ steps.pick.outputs.upstream_name }}
+          Upstream tag: ${{ steps.pick.outputs.upstream_tag }}
+          Asset: ${{ steps.pick.outputs.asset_name }}"
