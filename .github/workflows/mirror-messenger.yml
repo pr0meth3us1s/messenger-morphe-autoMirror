@@ -58,7 +58,7 @@ jobs:
           SAFE_VERSION=$(printf '%s' "$VERSION" | tr -cd '[:alnum:]._-')
 
           MIRROR_TAG="messenger-${BUILD_DATE}"
-          RELEASE_TITLE="Messenger Morphe ${BUILD_DATE} • v${SAFE_VERSION}"
+          RELEASE_TITLE="v${SAFE_VERSION}"
           VERSIONED_NAME="messenger-Morphe-${BUILD_DATE}-v${SAFE_VERSION}.apk"
 
           echo "asset_name=$ASSET_NAME" >> "$GITHUB_OUTPUT"
